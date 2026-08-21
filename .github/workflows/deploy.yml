@@ -18,13 +18,15 @@ jobs:
           node-version: '20'
 
       - name: Install PHP dependencies
+        env:
+          PHP_BINARY: /usr/local/lsws/lsphp84/bin/php8.4
         run: /usr/local/lsws/lsphp84/bin/php8.4 /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
 
       - name: Install JS dependencies
         run: npm ci
 
       - name: Build assets
-        run: npm run build
+        run: PATH=/usr/local/lsws/lsphp84/bin:$PATH npm run build
 
       - name: Deploy
         run: |
