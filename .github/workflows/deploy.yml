@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout code
@@ -16,7 +16,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install JS dependencies
         run: npm ci
@@ -24,47 +23,30 @@ jobs:
       - name: Build assets
         run: npm run build
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT }}
-          script: |
-            set -e
-            cd /home/crm.isoola.com/crm-isoola
+      - name: Deploy
+        run: |
+          set -e
+          cd /home/crm.isoola.com/crm-isoola
 
-            # Pull latest code
-            git pull origin main
+          # Pull latest code
+          git pull origin main
 
-            # Use PHP 8.4 binary from LiteSpeed
-            PHP=/usr/local/lsws/lsphp84/bin/php8.4
+          # Use PHP 8.4 binary from LiteSpeed
+          PHP=/usr/local/lsws/lsphp84/bin/php8.4
 
-            # Install/update PHP dependencies (skip dev)
-            $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
+          # Install/update PHP dependencies (skip dev)
+          $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
 
-            # Run any pending migrations
-            $PHP artisan migrate --force
+          # Run any pending migrations
+          $PHP artisan migrate --force
 
-            # Clear & rebuild caches
-            $PHP artisan config:cache
-            $PHP artisan route:cache
-            $PHP artisan view:cache
-            $PHP artisan event:cache
+          # Clear & rebuild caches
+          $PHP artisan config:cache
+          $PHP artisan route:cache
+          $PHP artisan view:cache
+          $PHP artisan event:cache
 
-            # Restart queue workers if any
-            $PHP artisan queue:restart
+          # Copy built assets
+          cp -r public/build /home/crm.isoola.com/crm-isoola/public/
 
-            echo "Deploy completed successfully!"
-
-      - name: Sync built assets to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT }}
-          source: 'public/build/*'
-          target: '/home/crm.isoola.com/crm-isoola/public/build'
-          strip_components: 2
+          echo "Deploy completed successfully!"
