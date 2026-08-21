@@ -33,6 +33,9 @@ jobs:
           set -e
           cd /home/crm.isoola.com/crm-isoola
 
+          # Allow git to operate in this directory (different owner from runner user)
+          git config --global --add safe.directory /home/crm.isoola.com/crm-isoola
+
           # Pull latest code
           git pull origin main
 
