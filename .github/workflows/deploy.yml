@@ -17,6 +17,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install PHP dependencies
+        run: /usr/local/lsws/lsphp84/bin/php8.4 /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
+
       - name: Install JS dependencies
         run: npm ci
 
@@ -45,8 +48,5 @@ jobs:
           $PHP artisan route:cache
           $PHP artisan view:cache
           $PHP artisan event:cache
-
-          # Copy built assets
-          cp -r public/build /home/crm.isoola.com/crm-isoola/public/
 
           echo "Deploy completed successfully!"
