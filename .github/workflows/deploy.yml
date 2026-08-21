@@ -39,6 +39,9 @@ jobs:
           # Pull latest code
           git pull origin main
 
+          # Copy built assets from runner workspace to app directory
+          cp -r /opt/github-runner/_work/crm-isoola/crm-isoola/public/build /home/crm.isoola.com/crm-isoola/public/
+
           # Use PHP 8.4 binary from LiteSpeed
           PHP=/usr/local/lsws/lsphp84/bin/php8.4
 
