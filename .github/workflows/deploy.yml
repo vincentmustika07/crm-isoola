@@ -35,12 +35,19 @@ jobs:
 
           APP_DIR=/home/crm.isoola.com/crm-isoola
           PHP=/usr/local/lsws/lsphp84/bin/php8.4
-          RUNNER_BUILD=/opt/github-runner/_work/crm-isoola/crm-isoola/public/build
+          # GITHUB_WORKSPACE is automatically set by the Actions runner to the checkout directory
+          RUNNER_BUILD=$GITHUB_WORKSPACE/public/build
 
           # Allow git to operate on a directory owned by a different user
           git config --global --add safe.directory $APP_DIR
 
           cd $APP_DIR
+
+          # Validate .env exists — deploy cannot proceed without it
+          if [ ! -f "$APP_DIR/.env" ]; then
+            echo "ERROR: .env file not found at $APP_DIR/.env — create it on the server first"
+            exit 1
+          fi
 
           # Pull latest code
           git pull origin main
@@ -48,6 +55,13 @@ jobs:
           # Sync built assets — remove stale hashed files first to avoid accumulation
           rm -rf $APP_DIR/public/build
           cp -r $RUNNER_BUILD $APP_DIR/public/build
+
+          # Fix ownership on everything that lscpd needs to read/write
+          chown -R lscpd:lscpd $APP_DIR/public/build 2>/dev/null || true
+
+          # Fix .env ownership — must be readable by lscpd (web server user)
+          chown lscpd:lscpd $APP_DIR/.env 2>/dev/null || true
+          chmod 640 $APP_DIR/.env 2>/dev/null || true
 
           # Ensure storage directories exist and are owned by the PHP/web server user (lscpd)
           mkdir -p $APP_DIR/storage/logs
@@ -58,7 +72,10 @@ jobs:
           chown -R lscpd:lscpd $APP_DIR/storage $APP_DIR/bootstrap/cache 2>/dev/null || true
 
           # Install/update PHP dependencies (production only)
-          $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
+          $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction --working-dir=$APP_DIR
+
+          # Fix vendor ownership so lscpd can read autoloaded classes
+          chown -R lscpd:lscpd $APP_DIR/vendor 2>/dev/null || true
 
           # Ensure storage symlink exists
           $PHP $APP_DIR/artisan storage:link --force
