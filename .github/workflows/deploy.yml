@@ -34,94 +34,51 @@ jobs:
       - name: Sync code to app directory
         run: |
           set -e
-
-          # Allow git to operate on directories owned by other users
           git config --global --add safe.directory $APP_DIR
-
-          # Validate .env exists on server — must be created manually before first deploy
           if [ ! -f "$APP_DIR/.env" ]; then
             echo "ERROR: $APP_DIR/.env not found. Create it on the server before deploying."
             exit 1
           fi
-
-          # Pull latest code into app directory
           cd $APP_DIR
           git pull origin main
 
       - name: Sync built assets
         run: |
           set -e
-
-          # Verify build was actually produced before attempting sync
           if [ ! -f "$GITHUB_WORKSPACE/public/build/manifest.json" ]; then
             echo "ERROR: manifest.json not found in $GITHUB_WORKSPACE/public/build/"
-            echo "Contents of $GITHUB_WORKSPACE/public/:"
             ls -la $GITHUB_WORKSPACE/public/ || true
             exit 1
           fi
-
           echo "Build manifest found. Asset count: $(ls $GITHUB_WORKSPACE/public/build/assets 2>/dev/null | wc -l)"
-
-          # Open permissions first so rm can delete regardless of previous owner
-          chmod -R u+w $APP_DIR/public/build 2>/dev/null || true
-          rm -rf $APP_DIR/public/build
-
-          # Copy fresh build from runner workspace
-          cp -r $GITHUB_WORKSPACE/public/build $APP_DIR/public/build
-
-          # Verify copy succeeded
-          if [ ! -f "$APP_DIR/public/build/manifest.json" ]; then
-            echo "ERROR: Copy failed — manifest.json not found in $APP_DIR/public/build/"
-            exit 1
-          fi
-
-          # Set ownership so OpenLiteSpeed (lscpd) can serve the assets
-          chown -R lscpd:lscpd $APP_DIR/public/build
+          sudo rsync -a --delete $GITHUB_WORKSPACE/public/build/ $APP_DIR/public/build/
+          sudo chown -R lscpd:lscpd $APP_DIR/public/build
           echo "Assets synced successfully to $APP_DIR/public/build"
 
       - name: Sync vendor directory
         run: |
           set -e
-
-          # Open permissions so rm can delete regardless of previous owner
-          chmod -R u+w $APP_DIR/vendor 2>/dev/null || true
-          rm -rf $APP_DIR/vendor
-
-          # Copy vendor from runner workspace (already installed in Install PHP dependencies step)
-          cp -r $GITHUB_WORKSPACE/vendor $APP_DIR/vendor
-
-          # Set ownership so lscpd can autoload classes
-          chown -R lscpd:lscpd $APP_DIR/vendor
+          sudo rsync -a --delete $GITHUB_WORKSPACE/vendor/ $APP_DIR/vendor/
+          sudo chown -R lscpd:lscpd $APP_DIR/vendor
 
       - name: Fix permissions
         run: |
           set -e
-
-          # Storage and bootstrap/cache must be writable by lscpd
           mkdir -p $APP_DIR/storage/logs
           mkdir -p $APP_DIR/storage/framework/cache
           mkdir -p $APP_DIR/storage/framework/sessions
           mkdir -p $APP_DIR/storage/framework/views
           mkdir -p $APP_DIR/bootstrap/cache
-
           chown -R lscpd:lscpd $APP_DIR/storage
           chown -R lscpd:lscpd $APP_DIR/bootstrap/cache
-
-          # .env must be readable by lscpd but not world-readable
           chown lscpd:lscpd $APP_DIR/.env
           chmod 640 $APP_DIR/.env
 
       - name: Run Laravel post-deploy commands
         run: |
           set -e
-
-          # Ensure public/storage symlink exists
           $PHP $APP_DIR/artisan storage:link --force
-
-          # Run pending migrations
           $PHP $APP_DIR/artisan migrate --force
-
-          # Clear then rebuild all caches for production
           $PHP $APP_DIR/artisan config:clear
           $PHP $APP_DIR/artisan cache:clear
           $PHP $APP_DIR/artisan optimize
