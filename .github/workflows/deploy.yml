@@ -24,10 +24,9 @@ jobs:
         run: /usr/local/lsws/lsphp84/bin/php8.4 /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
 
       - name: Build assets
-        run: |
-          export PATH="/usr/local/lsws/lsphp84/bin:$PATH"
-          ln -sf /usr/local/lsws/lsphp84/bin/php8.4 /usr/local/bin/php
-          npm run build
+        run: npm run build
+        env:
+          PATH: /usr/local/lsws/lsphp84/bin:${{ env.PATH }}
 
       - name: Deploy to VPS
         run: |
