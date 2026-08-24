@@ -2,11 +2,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from '@inertiajs/react';
 import {
     getCoreRowModel,
+    getFilteredRowModel,
     getSortedRowModel,
     useReactTable,
 } from '@tanstack/react-table';
-import type { ColumnDef, SortingState } from '@tanstack/react-table';
-import { useState } from 'react';
+import type { ColumnDef, ColumnFiltersState, SortingState } from '@tanstack/react-table';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import type { CustomerSchema } from './schema';
@@ -49,29 +50,70 @@ export function useCustomerTable(
     columns: ColumnDef<Customer>[],
 ) {
     const [sorting, setSorting] = useState<SortingState>([]);
+    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
     const table = useReactTable({
         data,
         columns,
-        state: { sorting },
+        state: { sorting, columnFilters },
         onSortingChange: setSorting,
+        onColumnFiltersChange: setColumnFilters,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        filterFns: {},
     });
 
     return table;
 }
 
+export interface DeleteCustomerState {
+    open: boolean;
+    id: number | null;
+    loading: boolean;
+}
+
 export function useDeleteCustomer() {
-    function deleteCustomer(id: number) {
-        if (
-            window.confirm(
-                'Delete this customer? This action cannot be undone.',
-            )
-        ) {
-            router.delete(`/customers/${id}`);
-        }
+    const [state, setState] = useState<DeleteCustomerState>({
+        open: false,
+        id: null,
+        loading: false,
+    });
+    const isMountedRef = useRef(true);
+
+    useEffect(() => {
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    function openConfirm(id: number) {
+        setState({ open: true, id, loading: false });
     }
 
-    return { deleteCustomer };
+    function closeConfirm() {
+        setState({ open: false, id: null, loading: false });
+    }
+
+    function confirmDelete() {
+        if (state.id === null) return;
+        const id = state.id;
+        setState((s) => ({ ...s, loading: true }));
+        router.delete(`/customers/${id}`, {
+            onSuccess: () => {
+                // Force refresh so the deleted item disappears.
+                router.visit('/customers', {
+                    replace: true,
+                    preserveScroll: false,
+                    preserveState: false,
+                });
+            },
+            onFinish: () =>
+                isMountedRef.current &&
+                setState({ open: false, id: null, loading: false }),
+        });
+    }
+
+    return { state, openConfirm, closeConfirm, confirmDelete };
 }
+

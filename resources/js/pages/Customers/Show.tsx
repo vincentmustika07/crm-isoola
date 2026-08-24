@@ -11,6 +11,7 @@ import {
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useDeleteCustomer } from '@/features/customers/hooks';
 import type { Customer } from '@/features/customers/types';
 import {
@@ -25,7 +26,7 @@ interface Props {
 }
 
 export default function CustomersShow({ customer }: Props) {
-    const { deleteCustomer } = useDeleteCustomer();
+    const { state, openConfirm, closeConfirm, confirmDelete } = useDeleteCustomer();
 
     return (
         <AppLayout>
@@ -69,7 +70,7 @@ export default function CustomersShow({ customer }: Props) {
                     </Link>
                     <Button
                         variant="danger"
-                        onClick={() => deleteCustomer(customer.id)}
+                        onClick={() => openConfirm(customer.id)}
                     >
                         <Trash2 className="h-4 w-4" />
                         Delete Customer
@@ -225,6 +226,17 @@ export default function CustomersShow({ customer }: Props) {
                     )}
                 </div>
             </div>
+
+            <ConfirmModal
+                open={state.open}
+                title="Delete Customer"
+                description="Are you sure you want to delete this customer? This action cannot be undone."
+                confirmLabel="Delete"
+                variant="danger"
+                loading={state.loading}
+                onConfirm={confirmDelete}
+                onCancel={closeConfirm}
+            />
         </AppLayout>
     );
 }

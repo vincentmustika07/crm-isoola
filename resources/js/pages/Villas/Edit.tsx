@@ -1,15 +1,18 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft } from 'lucide-react';
 import { Controller } from 'react-hook-form';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Select } from '@/components/ui/Select';
 import {
     VILLA_NAME_OPTIONS,
     VILLA_STATUS_OPTIONS,
 } from '@/features/villas/constants';
 import { useVillaForm } from '@/features/villas/hooks';
+import type { VillaSchema } from '@/features/villas/schema';
 import type { Villa } from '@/features/villas/types';
 import AppLayout from '@/layouts/AppLayout';
 
@@ -19,6 +22,10 @@ interface Props {
 
 export default function VillasEdit({ villa }: Props) {
     const { form, onSubmit } = useVillaForm(villa);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [pendingValues, setPendingValues] = useState<VillaSchema | null>(
+        null,
+    );
     const {
         register,
         control,
@@ -52,7 +59,10 @@ export default function VillasEdit({ villa }: Props) {
 
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                     <form
-                        onSubmit={handleSubmit(onSubmit)}
+                        onSubmit={handleSubmit((values) => {
+                            setPendingValues(values);
+                            setConfirmOpen(true);
+                        })}
                         className="space-y-5"
                     >
                         <Controller
@@ -110,6 +120,24 @@ export default function VillasEdit({ villa }: Props) {
                     </form>
                 </div>
             </div>
+
+            <ConfirmModal
+                open={confirmOpen}
+                title="Save Changes"
+                description={`Are you sure you want to save changes for ${villa.name}?`}
+                confirmLabel="Save"
+                variant="primary"
+                onConfirm={() => {
+                    if (!pendingValues) return;
+                    onSubmit(pendingValues);
+                    setConfirmOpen(false);
+                    setPendingValues(null);
+                }}
+                onCancel={() => {
+                    setConfirmOpen(false);
+                    setPendingValues(null);
+                }}
+            />
         </AppLayout>
     );
 }

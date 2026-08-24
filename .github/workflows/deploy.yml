@@ -20,6 +20,9 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      - name: Install PHP dependencies for build
+        run: /usr/local/lsws/lsphp84/bin/php8.4 /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
+
       - name: Build assets
         run: npm run build
 

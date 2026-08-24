@@ -1,3 +1,5 @@
+import { forwardRef } from 'react';
+
 import { cn } from '@/lib/utils';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -25,17 +27,21 @@ const sizeClass: Record<ButtonSize, string> = {
     lg: 'px-5 py-2.5 text-sm',
 };
 
-export function Button({
-    variant = 'primary',
-    size = 'md',
-    loading = false,
-    disabled,
-    className,
-    children,
-    ...props
-}: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+    {
+        variant = 'primary',
+        size = 'md',
+        loading = false,
+        disabled,
+        className,
+        children,
+        ...props
+    },
+    ref,
+) {
     return (
         <button
+            ref={ref}
             disabled={disabled || loading}
             className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
@@ -69,4 +75,5 @@ export function Button({
             {children}
         </button>
     );
-}
+});
+

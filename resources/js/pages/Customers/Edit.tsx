@@ -1,13 +1,16 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft } from 'lucide-react';
 import { Controller } from 'react-hook-form';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { Select } from '@/components/ui/Select';
 import { COUNTRY_CODES } from '@/features/customers/constants';
 import { useCustomerForm } from '@/features/customers/hooks';
+import type { CustomerSchema } from '@/features/customers/schema';
 import type { Customer } from '@/features/customers/types';
 import type { Villa } from '@/features/villas/types';
 import AppLayout from '@/layouts/AppLayout';
@@ -24,6 +27,9 @@ function maskPhoneNumber(value: string): string {
 
 export default function CustomersEdit({ customer, villas }: Props) {
     const { form, onSubmit } = useCustomerForm(customer);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [pendingValues, setPendingValues] =
+        useState<CustomerSchema | null>(null);
     const {
         register,
         control,
@@ -71,7 +77,10 @@ export default function CustomersEdit({ customer, villas }: Props) {
 
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                     <form
-                        onSubmit={handleSubmit(onSubmit)}
+                        onSubmit={handleSubmit((values) => {
+                            setPendingValues(values);
+                            setConfirmOpen(true);
+                        })}
                         className="space-y-5"
                     >
                         <Input
@@ -162,6 +171,24 @@ export default function CustomersEdit({ customer, villas }: Props) {
                     </form>
                 </div>
             </div>
+
+            <ConfirmModal
+                open={confirmOpen}
+                title="Save Changes"
+                description={`Are you sure you want to save changes for ${customer.name}?`}
+                confirmLabel="Save"
+                variant="primary"
+                onConfirm={() => {
+                    if (!pendingValues) return;
+                    onSubmit(pendingValues);
+                    setConfirmOpen(false);
+                    setPendingValues(null);
+                }}
+                onCancel={() => {
+                    setConfirmOpen(false);
+                    setPendingValues(null);
+                }}
+            />
         </AppLayout>
     );
 }

@@ -12,6 +12,7 @@ import {
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import type { Customer } from '@/features/customers/types';
 import {
     VILLA_STATUS_LABEL,
@@ -27,7 +28,7 @@ interface Props {
 }
 
 export default function VillasShow({ villa }: Props) {
-    const { deleteVilla } = useDeleteVilla();
+    const { state, openConfirm, closeConfirm, confirmDelete } = useDeleteVilla();
 
     return (
         <AppLayout>
@@ -72,7 +73,7 @@ export default function VillasShow({ villa }: Props) {
                     </Link>
                     <Button
                         variant="danger"
-                        onClick={() => deleteVilla(villa.id)}
+                        onClick={() => openConfirm(villa.id)}
                     >
                         <Trash2 className="h-4 w-4" />
                         Delete Villa
@@ -232,6 +233,17 @@ export default function VillasShow({ villa }: Props) {
                     )}
                 </div>
             </div>
+
+            <ConfirmModal
+                open={state.open}
+                title="Delete Villa"
+                description="Are you sure you want to delete this villa? This action cannot be undone and will remove all associated customer links."
+                confirmLabel="Delete"
+                variant="danger"
+                loading={state.loading}
+                onConfirm={confirmDelete}
+                onCancel={closeConfirm}
+            />
         </AppLayout>
     );
 }
