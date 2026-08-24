@@ -58,17 +58,17 @@ jobs:
           chown -R nobody:nogroup $APP_DIR/storage $APP_DIR/bootstrap/cache 2>/dev/null || true
 
           # Ensure storage symlink exists
-          $PHP artisan storage:link --force
+          $PHP $APP_DIR/artisan storage:link --force
 
           # Run any pending migrations
-          $PHP artisan migrate --force
+          $PHP $APP_DIR/artisan migrate --force
 
           # Clear stale config/route/view caches before rebuilding
-          $PHP artisan config:clear
-          $PHP artisan cache:clear
+          $PHP $APP_DIR/artisan config:clear
+          $PHP $APP_DIR/artisan cache:clear
 
           # Rebuild all caches for production
-          $PHP artisan optimize
+          $PHP $APP_DIR/artisan optimize
 
           # Restart OpenLiteSpeed to pick up any PHP/config changes
           systemctl restart lsws 2>/dev/null || true
