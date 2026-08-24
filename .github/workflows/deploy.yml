@@ -49,15 +49,12 @@ jobs:
           rm -rf $APP_DIR/public/build
           cp -r $RUNNER_BUILD $APP_DIR/public/build
 
-          # Fix storage & cache directory permissions BEFORE composer so post-autoload-dump can write
+          # Ensure storage directories exist (mkdir is safe regardless of owner)
           mkdir -p $APP_DIR/storage/logs
           mkdir -p $APP_DIR/storage/framework/cache
           mkdir -p $APP_DIR/storage/framework/sessions
           mkdir -p $APP_DIR/storage/framework/views
           mkdir -p $APP_DIR/bootstrap/cache
-          chmod -R 775 $APP_DIR/storage
-          chmod -R 775 $APP_DIR/bootstrap/cache
-          chown -R nobody:nogroup $APP_DIR/storage $APP_DIR/bootstrap/cache 2>/dev/null || true
 
           # Install/update PHP dependencies (production only)
           $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
