@@ -30,10 +30,6 @@ jobs:
 
       - name: Build assets
         run: npm run build
-        env:
-          # Wayfinder plugin calls `php artisan` during build — point it to PHP 8.4
-          # so it matches the version required by composer dependencies
-          PHP_BINARY: /usr/local/lsws/lsphp84/bin/php8.4
 
       - name: Sync code to app directory
         run: |
