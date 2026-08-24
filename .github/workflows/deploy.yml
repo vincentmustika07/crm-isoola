@@ -23,10 +23,11 @@ jobs:
       - name: Install PHP dependencies for build
         run: /usr/local/lsws/lsphp84/bin/php8.4 /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
 
+      - name: Add PHP 8.4 to PATH
+        run: echo "/usr/local/lsws/lsphp84/bin" >> $GITHUB_PATH
+
       - name: Build assets
         run: npm run build
-        env:
-          PATH: /usr/local/lsws/lsphp84/bin:${{ env.PATH }}
 
       - name: Deploy to VPS
         run: |
