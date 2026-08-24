@@ -17,14 +17,14 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Add PHP 8.4 to PATH
+        run: echo "/usr/local/lsws/lsphp84/bin" >> $GITHUB_PATH
+
       - name: Install JS dependencies
         run: npm ci
 
       - name: Install PHP dependencies for build
         run: /usr/local/lsws/lsphp84/bin/php8.4 /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
-
-      - name: Add PHP 8.4 to PATH
-        run: echo "/usr/local/lsws/lsphp84/bin" >> $GITHUB_PATH
 
       - name: Build assets
         run: npm run build
@@ -52,13 +52,25 @@ jobs:
           # Install/update PHP dependencies (production only)
           $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
 
+          # Fix storage & cache directory permissions so Laravel can write files
+          chmod -R 775 $APP_DIR/storage
+          chmod -R 775 $APP_DIR/bootstrap/cache
+          chown -R nobody:nogroup $APP_DIR/storage $APP_DIR/bootstrap/cache 2>/dev/null || true
+
           # Ensure storage symlink exists
           $PHP artisan storage:link --force
 
           # Run any pending migrations
           $PHP artisan migrate --force
 
-          # Clear & rebuild all caches
+          # Clear stale config/route/view caches before rebuilding
+          $PHP artisan config:clear
+          $PHP artisan cache:clear
+
+          # Rebuild all caches for production
           $PHP artisan optimize
+
+          # Restart OpenLiteSpeed to pick up any PHP/config changes
+          systemctl restart lsws 2>/dev/null || true
 
           echo "Deploy completed successfully!"
