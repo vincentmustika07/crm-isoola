@@ -69,10 +69,10 @@ jobs:
           mkdir -p $APP_DIR/storage/framework/sessions
           mkdir -p $APP_DIR/storage/framework/views
           mkdir -p $APP_DIR/bootstrap/cache
-          chown -R lscpd:lscpd $APP_DIR/storage
-          chown -R lscpd:lscpd $APP_DIR/bootstrap/cache
-          chown lscpd:lscpd $APP_DIR/.env
-          chmod 640 $APP_DIR/.env
+          sudo chown -R lscpd:lscpd $APP_DIR/storage
+          sudo chown -R lscpd:lscpd $APP_DIR/bootstrap/cache
+          sudo chown lscpd:lscpd $APP_DIR/.env
+          sudo chmod 640 $APP_DIR/.env
 
       - name: Run Laravel post-deploy commands
         run: |
