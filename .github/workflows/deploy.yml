@@ -25,11 +25,11 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Build assets
-        run: npm run build
-
       - name: Install PHP dependencies
         run: $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
+
+      - name: Build assets
+        run: npm run build
 
       - name: Sync code to app directory
         run: |
@@ -52,6 +52,16 @@ jobs:
         run: |
           set -e
 
+          # Verify build was actually produced before attempting sync
+          if [ ! -f "$GITHUB_WORKSPACE/public/build/manifest.json" ]; then
+            echo "ERROR: manifest.json not found in $GITHUB_WORKSPACE/public/build/"
+            echo "Contents of $GITHUB_WORKSPACE/public/:"
+            ls -la $GITHUB_WORKSPACE/public/ || true
+            exit 1
+          fi
+
+          echo "Build manifest found. Asset count: $(ls $GITHUB_WORKSPACE/public/build/assets 2>/dev/null | wc -l)"
+
           # Open permissions first so rm can delete regardless of previous owner
           chmod -R u+w $APP_DIR/public/build 2>/dev/null || true
           rm -rf $APP_DIR/public/build
@@ -59,8 +69,15 @@ jobs:
           # Copy fresh build from runner workspace
           cp -r $GITHUB_WORKSPACE/public/build $APP_DIR/public/build
 
+          # Verify copy succeeded
+          if [ ! -f "$APP_DIR/public/build/manifest.json" ]; then
+            echo "ERROR: Copy failed — manifest.json not found in $APP_DIR/public/build/"
+            exit 1
+          fi
+
           # Set ownership so OpenLiteSpeed (lscpd) can serve the assets
           chown -R lscpd:lscpd $APP_DIR/public/build
+          echo "Assets synced successfully to $APP_DIR/public/build"
 
       - name: Sync vendor directory
         run: |
