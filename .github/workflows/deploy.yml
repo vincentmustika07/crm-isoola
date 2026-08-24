@@ -17,44 +17,42 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install PHP dependencies
-        env:
-          PHP_BINARY: /usr/local/lsws/lsphp84/bin/php8.4
-        run: /usr/local/lsws/lsphp84/bin/php8.4 /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
-
       - name: Install JS dependencies
         run: npm ci
 
       - name: Build assets
-        run: PATH=/usr/local/lsws/lsphp84/bin:$PATH npm run build
+        run: npm run build
 
-      - name: Deploy
+      - name: Deploy to VPS
         run: |
           set -e
-          cd /home/crm.isoola.com/crm-isoola
 
-          # Allow git to operate in this directory (different owner from runner user)
-          git config --global --add safe.directory /home/crm.isoola.com/crm-isoola
+          APP_DIR=/home/crm.isoola.com/crm-isoola
+          PHP=/usr/local/lsws/lsphp84/bin/php8.4
+          RUNNER_BUILD=/opt/github-runner/_work/crm-isoola/crm-isoola/public/build
+
+          # Allow git to operate on a directory owned by a different user
+          git config --global --add safe.directory $APP_DIR
+
+          cd $APP_DIR
 
           # Pull latest code
           git pull origin main
 
-          # Copy built assets from runner workspace to app directory
-          cp -r /opt/github-runner/_work/crm-isoola/crm-isoola/public/build /home/crm.isoola.com/crm-isoola/public/
+          # Sync built assets — remove stale hashed files first to avoid accumulation
+          rm -rf $APP_DIR/public/build
+          cp -r $RUNNER_BUILD $APP_DIR/public/build
 
-          # Use PHP 8.4 binary from LiteSpeed
-          PHP=/usr/local/lsws/lsphp84/bin/php8.4
-
-          # Install/update PHP dependencies (skip dev)
+          # Install/update PHP dependencies (production only)
           $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
+
+          # Ensure storage symlink exists
+          $PHP artisan storage:link --force
 
           # Run any pending migrations
           $PHP artisan migrate --force
 
-          # Clear & rebuild caches
-          $PHP artisan config:cache
-          $PHP artisan route:cache
-          $PHP artisan view:cache
-          $PHP artisan event:cache
+          # Clear & rebuild all caches
+          $PHP artisan optimize
 
           echo "Deploy completed successfully!"
