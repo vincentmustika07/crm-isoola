@@ -85,6 +85,7 @@ export function useDeleteVilla() {
 
     function confirmDelete() {
         if (state.id === null) return;
+        
         const id = state.id;
         setState((s) => ({ ...s, loading: true }));
         router.delete(VillaController.destroy.url({ villa: id }), {

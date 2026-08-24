@@ -13,9 +13,10 @@ import { useCustomerTable, useDeleteCustomer } from '@/features/customers/hooks'
 import type { Customer } from '@/features/customers/types';
 import { VILLA_STATUS_VARIANT } from '@/features/villas/constants';
 import AppLayout from '@/layouts/AppLayout';
+import type { Paginator } from '@/lib/types';
 import { formatPhone } from '@/lib/utils';
 
-interface Props { customers: Customer[]; }
+interface Props { customers: Paginator<Customer>; }
 
 function CustomerActions({ customer, onDelete }: { customer: Customer; onDelete: (id: number) => void; }) {
     return (
@@ -31,7 +32,7 @@ export default function CustomersIndex({ customers }: Props) {
     const { state, openConfirm, closeConfirm, confirmDelete } = useDeleteCustomer();
     const [search, setSearch] = useState('');
     const [villaFilter, setVillaFilter] = useState<'all' | 'with' | 'without'>('all');
-    const filtered = customers.filter((c) => {
+    const filtered = customers.data.filter((c) => {
         const q = search.trim().toLowerCase();
         const matchesSearch =
             !q ||
@@ -55,8 +56,8 @@ export default function CustomersIndex({ customers }: Props) {
         { id: 'actions', header: '', enableSorting: false, size: 120, cell: ({ row }) => (<CustomerActions customer={row.original} onDelete={openConfirm} />) },
     ], [openConfirm]);
     const table = useCustomerTable(filtered, columns);
-    const withVilla = customers.filter((c) => c.villas && c.villas.length > 0).length;
-    const withoutVilla = customers.filter((c) => !c.villas || c.villas.length === 0).length;
+    const withVilla = customers.data.filter((c) => c.villas && c.villas.length > 0).length;
+    const withoutVilla = customers.data.filter((c) => !c.villas || c.villas.length === 0).length;
     const showCount = search.trim() !== '' || villaFilter !== 'all';
     return (
         <AppLayout>
@@ -72,7 +73,7 @@ export default function CustomersIndex({ customers }: Props) {
                     </Link>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
-                    <StatCard label="Total" value={customers.length} icon={Users} iconBg="bg-blue-50" iconColor="text-blue-600" />
+                    <StatCard label="Total" value={customers.meta.total} icon={Users} iconBg="bg-blue-50" iconColor="text-blue-600" />
                     <StatCard label="With Villa" value={withVilla} icon={Users} iconBg="bg-emerald-50" iconColor="text-emerald-600" />
                     <StatCard label="Without Villa" value={withoutVilla} icon={Users} iconBg="bg-gray-100" iconColor="text-gray-500" />
                 </div>
@@ -94,7 +95,7 @@ export default function CustomersIndex({ customers }: Props) {
                         </div>
                             {showCount && (
                                 <span className="text-xs text-gray-500">
-                                    {filtered.length} of {customers.length} customers
+                                    {filtered.length} of {customers.meta.total} customers
                                 </span>
                             )}
                         </div>

@@ -97,6 +97,7 @@ export function useDeleteCustomer() {
 
     function confirmDelete() {
         if (state.id === null) return;
+        
         const id = state.id;
         setState((s) => ({ ...s, loading: true }));
         router.delete(CustomerController.destroy.url({ customer: id }), {

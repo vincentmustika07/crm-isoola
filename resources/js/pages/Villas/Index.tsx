@@ -17,9 +17,10 @@ import {
 import { useDeleteVilla, useVillaTable } from '@/features/villas/hooks';
 import type { Villa, VillaStatus } from '@/features/villas/types';
 import AppLayout from '@/layouts/AppLayout';
+import type { Paginator } from '@/lib/types';
 
 interface Props {
-    villas: Villa[];
+    villas: Paginator<Villa>;
 }
 
 function VillaActions({
@@ -57,7 +58,7 @@ export default function VillasIndex({ villas }: Props) {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<VillaStatus | 'all'>('all');
 
-    const filtered = villas.filter((villa) => {
+    const filtered = villas.data.filter((villa) => {
         const q = search.toLowerCase();
         const matchesSearch =
             villa.name.toLowerCase().includes(q) ||
@@ -117,9 +118,9 @@ export default function VillasIndex({ villas }: Props) {
 
     const table = useVillaTable(filtered, columns);
 
-    const totalAvailable = villas.filter((v) => v.status === 'available').length;
-    const totalSold = villas.filter((v) => v.status === 'sold').length;
-    const totalPending = villas.filter((v) => v.status === 'pending').length;
+    const totalAvailable = villas.data.filter((v) => v.status === 'available').length;
+    const totalSold = villas.data.filter((v) => v.status === 'sold').length;
+    const totalPending = villas.data.filter((v) => v.status === 'pending').length;
     const showCount = search.trim() !== '' || statusFilter !== 'all';
 
     return (
@@ -137,7 +138,7 @@ export default function VillasIndex({ villas }: Props) {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <StatCard label="Total" value={villas.length} icon={Building2} iconBg="bg-blue-50" iconColor="text-blue-600" />
+                    <StatCard label="Total" value={villas.meta.total} icon={Building2} iconBg="bg-blue-50" iconColor="text-blue-600" />
                     <StatCard label="Available" value={totalAvailable} icon={CheckCircle} iconBg="bg-emerald-50" iconColor="text-emerald-600" />
                     <StatCard label="Pending" value={totalPending} icon={Clock} iconBg="bg-amber-50" iconColor="text-amber-600" />
                     <StatCard label="Sold" value={totalSold} icon={Building2} iconBg="bg-red-50" iconColor="text-red-500" />
@@ -169,7 +170,7 @@ export default function VillasIndex({ villas }: Props) {
 
                             {showCount && (
                                 <span className="text-xs text-gray-500">
-                                    {filtered.length} of {villas.length} villas
+                                    {filtered.length} of {villas.meta.total} villas
                                 </span>
                             )}
                         </div>
