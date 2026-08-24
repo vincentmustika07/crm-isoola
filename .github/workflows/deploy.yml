@@ -110,7 +110,7 @@ jobs:
           $PHP $APP_DIR/artisan optimize
 
       - name: Restart OpenLiteSpeed
-        run: systemctl restart lsws
+        run: sudo systemctl restart lsws
 
       - name: Verify deployment
         run: |
