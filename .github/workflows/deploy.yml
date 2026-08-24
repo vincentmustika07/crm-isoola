@@ -8,6 +8,11 @@ jobs:
   deploy:
     runs-on: self-hosted
 
+    env:
+      PHP: /usr/local/lsws/lsphp84/bin/php8.4
+      APP_DIR: /home/crm.isoola.com/crm-isoola
+      COMPOSER_ALLOW_SUPERUSER: "1"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -17,80 +22,103 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Add PHP 8.4 to PATH
-        run: echo "/usr/local/lsws/lsphp84/bin" >> $GITHUB_PATH
-
       - name: Install JS dependencies
         run: npm ci
-
-      - name: Install PHP dependencies for build
-        run: /usr/local/lsws/lsphp84/bin/php8.4 /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
 
       - name: Build assets
         run: npm run build
 
-      - name: Deploy to VPS
+      - name: Install PHP dependencies
+        run: $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
+
+      - name: Sync code to app directory
         run: |
           set -e
 
-          APP_DIR=/home/crm.isoola.com/crm-isoola
-          PHP=/usr/local/lsws/lsphp84/bin/php8.4
-          # GITHUB_WORKSPACE is automatically set by the Actions runner to the checkout directory
-          RUNNER_BUILD=$GITHUB_WORKSPACE/public/build
-
-          # Allow git to operate on a directory owned by a different user
+          # Allow git to operate on directories owned by other users
           git config --global --add safe.directory $APP_DIR
 
-          cd $APP_DIR
-
-          # Validate .env exists — deploy cannot proceed without it
+          # Validate .env exists on server — must be created manually before first deploy
           if [ ! -f "$APP_DIR/.env" ]; then
-            echo "ERROR: .env file not found at $APP_DIR/.env — create it on the server first"
+            echo "ERROR: $APP_DIR/.env not found. Create it on the server before deploying."
             exit 1
           fi
 
-          # Pull latest code
+          # Pull latest code into app directory
+          cd $APP_DIR
           git pull origin main
 
-          # Sync built assets — remove stale hashed files first to avoid accumulation
+      - name: Sync built assets
+        run: |
+          set -e
+
+          # Open permissions first so rm can delete regardless of previous owner
+          chmod -R u+w $APP_DIR/public/build 2>/dev/null || true
           rm -rf $APP_DIR/public/build
-          cp -r $RUNNER_BUILD $APP_DIR/public/build
 
-          # Fix ownership on everything that lscpd needs to read/write
-          chown -R lscpd:lscpd $APP_DIR/public/build 2>/dev/null || true
+          # Copy fresh build from runner workspace
+          cp -r $GITHUB_WORKSPACE/public/build $APP_DIR/public/build
 
-          # Fix .env ownership — must be readable by lscpd (web server user)
-          chown lscpd:lscpd $APP_DIR/.env 2>/dev/null || true
-          chmod 640 $APP_DIR/.env 2>/dev/null || true
+          # Set ownership so OpenLiteSpeed (lscpd) can serve the assets
+          chown -R lscpd:lscpd $APP_DIR/public/build
 
-          # Ensure storage directories exist and are owned by the PHP/web server user (lscpd)
+      - name: Sync vendor directory
+        run: |
+          set -e
+
+          # Open permissions so rm can delete regardless of previous owner
+          chmod -R u+w $APP_DIR/vendor 2>/dev/null || true
+          rm -rf $APP_DIR/vendor
+
+          # Copy vendor from runner workspace (already installed in Install PHP dependencies step)
+          cp -r $GITHUB_WORKSPACE/vendor $APP_DIR/vendor
+
+          # Set ownership so lscpd can autoload classes
+          chown -R lscpd:lscpd $APP_DIR/vendor
+
+      - name: Fix permissions
+        run: |
+          set -e
+
+          # Storage and bootstrap/cache must be writable by lscpd
           mkdir -p $APP_DIR/storage/logs
           mkdir -p $APP_DIR/storage/framework/cache
           mkdir -p $APP_DIR/storage/framework/sessions
           mkdir -p $APP_DIR/storage/framework/views
           mkdir -p $APP_DIR/bootstrap/cache
-          chown -R lscpd:lscpd $APP_DIR/storage $APP_DIR/bootstrap/cache 2>/dev/null || true
 
-          # Install/update PHP dependencies (production only)
-          $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction --working-dir=$APP_DIR
+          chown -R lscpd:lscpd $APP_DIR/storage
+          chown -R lscpd:lscpd $APP_DIR/bootstrap/cache
 
-          # Fix vendor ownership so lscpd can read autoloaded classes
-          chown -R lscpd:lscpd $APP_DIR/vendor 2>/dev/null || true
+          # .env must be readable by lscpd but not world-readable
+          chown lscpd:lscpd $APP_DIR/.env
+          chmod 640 $APP_DIR/.env
 
-          # Ensure storage symlink exists
+      - name: Run Laravel post-deploy commands
+        run: |
+          set -e
+
+          # Ensure public/storage symlink exists
           $PHP $APP_DIR/artisan storage:link --force
 
-          # Run any pending migrations
+          # Run pending migrations
           $PHP $APP_DIR/artisan migrate --force
 
-          # Clear stale config/route/view caches before rebuilding
+          # Clear then rebuild all caches for production
           $PHP $APP_DIR/artisan config:clear
           $PHP $APP_DIR/artisan cache:clear
-
-          # Rebuild all caches for production
           $PHP $APP_DIR/artisan optimize
 
-          # Restart OpenLiteSpeed to pick up any PHP/config changes
-          systemctl restart lsws 2>/dev/null || true
+      - name: Restart OpenLiteSpeed
+        run: systemctl restart lsws
 
+      - name: Verify deployment
+        run: |
+          echo "=== Deploy Summary ==="
+          echo "App dir : $APP_DIR"
+          echo "PHP     : $($PHP -r 'echo PHP_VERSION;')"
+          echo "Branch  : $(cd $APP_DIR && git rev-parse --abbrev-ref HEAD)"
+          echo "Commit  : $(cd $APP_DIR && git rev-parse --short HEAD)"
+          echo "Build   : $(ls $APP_DIR/public/build/assets | wc -l) asset files"
+          echo "====================="
           echo "Deploy completed successfully!"
