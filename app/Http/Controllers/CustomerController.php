@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreCustomerRequest;
+use App\Http\Requests\UpdateCustomerRequest;
 use App\Models\Customer;
 use App\Models\Villa;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -13,7 +14,7 @@ class CustomerController extends Controller
     public function index(): Response
     {
         return Inertia::render('Customers/Index', [
-            'customers' => Customer::with('villas')->orderBy('name')->get(),
+            'customers' => Customer::with('villas')->orderBy('name')->paginate(20),
         ]);
     }
 
@@ -24,16 +25,9 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(StoreCustomerRequest $request)
     {
-        $validated = $request->validate([
-            'name'         => 'required|string|max:255',
-            'email'        => 'nullable|email|max:255',
-            'phone_code'   => 'required|string|max:10',
-            'phone_number' => 'required|string|max:20',
-            'villa_ids'    => 'nullable|array',
-            'villa_ids.*'  => 'exists:villas,id',
-        ]);
+        $validated = $request->validated();
 
         $customer = Customer::create([
             'name'         => $validated['name'],
@@ -64,16 +58,9 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function update(Request $request, Customer $customer)
+    public function update(UpdateCustomerRequest $request, Customer $customer)
     {
-        $validated = $request->validate([
-            'name'         => 'required|string|max:255',
-            'email'        => 'nullable|email|max:255',
-            'phone_code'   => 'required|string|max:10',
-            'phone_number' => 'required|string|max:20',
-            'villa_ids'    => 'nullable|array',
-            'villa_ids.*'  => 'exists:villas,id',
-        ]);
+        $validated = $request->validated();
 
         $customer->update([
             'name'         => $validated['name'],

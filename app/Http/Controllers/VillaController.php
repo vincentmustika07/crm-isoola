@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreVillaRequest;
+use App\Http\Requests\UpdateVillaRequest;
 use App\Models\Villa;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -12,7 +13,7 @@ class VillaController extends Controller
     public function index(): Response
     {
         return Inertia::render('Villas/Index', [
-            'villas' => Villa::orderBy('position')->get(),
+            'villas' => Villa::orderBy('position')->paginate(20),
         ]);
     }
 
@@ -21,15 +22,9 @@ class VillaController extends Controller
         return Inertia::render('Villas/Create');
     }
 
-    public function store(Request $request)
+    public function store(StoreVillaRequest $request)
     {
-        $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'position' => 'required|string|max:20',
-            'status'   => 'required|in:available,pending,sold',
-        ]);
-
-        Villa::create($validated);
+        Villa::create($request->validated());
 
         return redirect()->route('villas.index')->with('success', 'Villa berhasil ditambahkan.');
     }
@@ -48,15 +43,9 @@ class VillaController extends Controller
         ]);
     }
 
-    public function update(Request $request, Villa $villa)
+    public function update(UpdateVillaRequest $request, Villa $villa)
     {
-        $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'position' => 'required|string|max:20',
-            'status'   => 'required|in:available,pending,sold',
-        ]);
-
-        $villa->update($validated);
+        $villa->update($request->validated());
 
         return redirect()->route('villas.index')->with('success', 'Villa berhasil diperbarui.');
     }

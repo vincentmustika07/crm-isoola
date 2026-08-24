@@ -10,6 +10,7 @@ import type { ColumnDef, ColumnFiltersState, SortingState } from '@tanstack/reac
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
+import * as VillaController from '@/actions/App/Http/Controllers/VillaController';
 import { villaSchema } from './schema';
 import type { VillaSchema } from './schema';
 import type { Villa } from './types';
@@ -26,9 +27,9 @@ export function useVillaForm(initialData?: Villa) {
 
     function onSubmit(values: VillaSchema) {
         if (initialData) {
-            router.put(`/villas/${initialData.id}`, values);
+            router.put(VillaController.update.url({ villa: initialData.id }), values);
         } else {
-            router.post('/villas', values);
+            router.post(VillaController.store.url(), values);
         }
     }
 
@@ -86,9 +87,9 @@ export function useDeleteVilla() {
         if (state.id === null) return;
         const id = state.id;
         setState((s) => ({ ...s, loading: true }));
-        router.delete(`/villas/${id}`, {
+        router.delete(VillaController.destroy.url({ villa: id }), {
             onSuccess: () => {
-                router.visit('/villas', {
+                router.visit(VillaController.index.url(), {
                     replace: true,
                     preserveScroll: false,
                     preserveState: false,

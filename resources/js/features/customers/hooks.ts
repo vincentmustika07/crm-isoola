@@ -8,17 +8,17 @@ import {
 } from '@tanstack/react-table';
 import type { ColumnDef, ColumnFiltersState, SortingState } from '@tanstack/react-table';
 import { useEffect, useRef, useState } from 'react';
+import type { Resolver } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
 
+import * as CustomerController from '@/actions/App/Http/Controllers/CustomerController';
 import type { CustomerSchema } from './schema';
 import { customerSchema } from './schema';
 import type { Customer } from './types';
 
 export function useCustomerForm(initialData?: Customer) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const form = useForm<CustomerSchema, any, CustomerSchema>({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        resolver: zodResolver(customerSchema) as any,
+    const form = useForm<CustomerSchema, unknown, CustomerSchema>({
+        resolver: zodResolver(customerSchema) as Resolver<CustomerSchema, unknown>,
         defaultValues: {
             name: initialData?.name ?? '',
             email: initialData?.email ?? '',
@@ -36,9 +36,9 @@ export function useCustomerForm(initialData?: Customer) {
         };
 
         if (initialData) {
-            router.put(`/customers/${initialData.id}`, payload);
+            router.put(CustomerController.update.url({ id: initialData.id }), payload);
         } else {
-            router.post('/customers', payload);
+            router.post(CustomerController.store.url(), payload);
         }
     }
 
@@ -99,10 +99,10 @@ export function useDeleteCustomer() {
         if (state.id === null) return;
         const id = state.id;
         setState((s) => ({ ...s, loading: true }));
-        router.delete(`/customers/${id}`, {
+        router.delete(CustomerController.destroy.url({ customer: id }), {
             onSuccess: () => {
                 // Force refresh so the deleted item disappears.
-                router.visit('/customers', {
+                router.visit(CustomerController.index.url(), {
                     replace: true,
                     preserveScroll: false,
                     preserveState: false,

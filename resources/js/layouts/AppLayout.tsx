@@ -2,6 +2,10 @@ import { Link, router, usePage } from '@inertiajs/react';
 import { Building2, LogOut, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import * as AuthController from '@/actions/App/Http/Controllers/AuthController';
+import * as CustomerController from '@/actions/App/Http/Controllers/CustomerController';
+import * as VillaController from '@/actions/App/Http/Controllers/VillaController';
+import { Toast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -25,7 +29,7 @@ const navGroups: NavGroup[] = [
         title: 'Menu',
         items: [
             {
-                href: '/customers',
+                href: CustomerController.index.url(),
                 label: 'Customers',
                 icon: Users,
                 matchPrefix: '/customers',
@@ -36,7 +40,7 @@ const navGroups: NavGroup[] = [
         title: 'Master',
         items: [
             {
-                href: '/villas',
+                href: VillaController.index.url(),
                 label: 'Villas',
                 icon: Building2,
                 matchPrefix: '/villas',
@@ -52,7 +56,7 @@ export default function AppLayout({ children }: Props) {
     const { url } = usePage();
 
     function handleLogout() {
-        router.post('/logout');
+        router.post(AuthController.logout.url());
     }
 
     return (
@@ -139,6 +143,7 @@ export default function AppLayout({ children }: Props) {
                 </header>
                 <main className="flex-1 overflow-y-auto p-8">{children}</main>
             </div>
+            <Toast />
         </div>
     );
 }
