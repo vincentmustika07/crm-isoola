@@ -20,6 +20,9 @@ jobs:
     env:
       PHP: /usr/local/lsws/lsphp84/bin/php8.4
       APP_DIR: /home/crm.isoola.com/crm-isoola
+      # extUser/extGroup vhost crm.isoola.com. PHP web jalan sebagai user ini,
+      # bukan lscpd, jadi dia yang harus bisa nulis storage/ + bootstrap/cache.
+      WEB_GROUP: crmis5326
 
     steps:
       - uses: actions/checkout@v4
@@ -53,14 +56,36 @@ jobs:
       - name: Migrate and cache
         run: |
           cd "$APP_DIR"
+
+          # artisan jalan sebagai github-runner, PHP web sebagai $WEB_GROUP.
+          # Keduanya cuma nyambung lewat grup, jadi file baru wajib group-writable.
+          # Tanpa umask 002 file jadi 644 dan web gagal nulis log/cache/session
+          # -> HTTP 500 tanpa satu baris pun di laravel.log.
+          umask 002
+
           $PHP artisan migrate --force
           $PHP artisan storage:link
           $PHP artisan optimize
 
-          # artisan jalan sebagai github-runner dan bikin file mode 644.
-          # User web cuma anggota grup lscpd, jadi tanpa g+w dia gagal nulis
-          # log/session/cache -> 500 tanpa jejak di laravel.log.
           chmod -R g+w storage bootstrap/cache 2>/dev/null || true
+
+      - name: Verify web user can write
+        run: |
+          cd "$APP_DIR"
+          # Deploy merah jauh lebih baik daripada situs 500 tanpa jejak log.
+          fail=0
+          for d in storage/logs storage/framework/sessions storage/framework/views bootstrap/cache; do
+            perm=$(stat -c "%A" "$d"); grp=$(stat -c "%G" "$d")
+            case "$perm" in
+              ?????w*) ;;
+              *) echo "::error::$d tidak group-writable (perm=$perm grup=$grp)"; fail=1 ;;
+            esac
+            if [ "$grp" != "$WEB_GROUP" ]; then
+              echo "::error::$d grup=$grp, seharusnya $WEB_GROUP"; fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] && echo "Web user ($WEB_GROUP) bisa nulis semua path runtime"
+          exit "$fail"
 
       - name: Restart OpenLiteSpeed
         run: sudo /usr/bin/systemctl restart lsws
