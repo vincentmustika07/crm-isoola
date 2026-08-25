@@ -50,16 +50,41 @@ jobs:
           test -f "$APP_DIR/.env"  || { echo "::error::$APP_DIR/.env tidak ada"; exit 1; }
           test -d "$APP_DIR/.git"  || { echo "::error::$APP_DIR bukan git repo"; exit 1; }
 
-          # git fetch menulis .git/FETCH_HEAD, dan reset --hard menimpa file
-          # worktree. Dua-duanya butuh runner sebagai PEMILIK, bukan cuma anggota
-          # grup: file .git default 444 dan .git/ sendiri 755, jadi bit group-write
-          # sering tidak ada. Begitu tree di-chgrp ke $WEB_GROUP tanpa chown,
-          # runner jatuh ke permission "other" (r-x) -> Permission denied.
-          if [ ! -w "$APP_DIR/.git" ] || [ ! -w "$APP_DIR" ]; then
-            echo "::error::$(id -un) tidak bisa menulis $APP_DIR (.git dimiliki $(stat -c '%U:%G %A' "$APP_DIR/.git"))"
-            echo "Perbaiki di server sebagai root, cukup sekali:"
-            echo "  chown -R $(id -un):$WEB_GROUP $APP_DIR"
+          # git fetch menulis .git/FETCH_HEAD dan reset --hard menimpa file worktree,
+          # jadi runner harus bisa menulis keduanya. Run #40 menunjukkan .git dimiliki
+          # lscpd:crmis5326 mode drwxrwsr-x -- sudah group-writable, artinya yang
+          # kurang adalah keanggotaan grup runner di $WEB_GROUP, bukan chown-nya.
+          # Cetak id -Gn + stat kedua path supaya tidak perlu menebak lagi.
+          me=$(id -un)
+
+          writable() { [ -w "$APP_DIR" ] && [ -w "$APP_DIR/.git" ]; }
+
+          if ! writable; then
+            echo "$me anggota grup: $(id -Gn)"
+            for p in "$APP_DIR" "$APP_DIR/.git"; do
+              echo "  $(stat -c '%A %U:%G' "$p")  $p  (writable: $([ -w "$p" ] && echo ya || echo TIDAK))"
+            done
+
+            # Runner sudah dipercaya `sudo systemctl restart lsws`. Kalau sudoers-nya
+            # tidak dibatasi ke perintah itu saja, deploy bisa sembuh sendiri tanpa
+            # perlu ada manusia yang SSH ke server tiap kali ownership di-reset
+            # (CyberPanel "Fix Permissions" melakukan itu).
+            if sudo -n true 2>/dev/null; then
+              echo "Punya sudo non-interaktif, mencoba perbaiki sendiri..."
+              sudo -n chown -R "$me:$WEB_GROUP" "$APP_DIR" || true
+              sudo -n find "$APP_DIR" -type d -exec chmod 2775 {} + || true
+              sudo -n chmod -R g+rwX "$APP_DIR/storage" "$APP_DIR/bootstrap/cache" || true
+            fi
+          fi
+
+          if ! writable; then
+            echo "::error::$me tidak bisa menulis $APP_DIR ($(stat -c '%U:%G %A' "$APP_DIR"), .git $(stat -c '%U:%G %A' "$APP_DIR/.git"))"
+            echo "Jalankan di server sebagai root, cukup sekali:"
+            echo "  usermod -aG $WEB_GROUP $me"
+            echo "  chown -R $me:$WEB_GROUP $APP_DIR"
             echo "  find $APP_DIR -type d -exec chmod 2775 {} +"
+            echo "  chmod -R g+rwX $APP_DIR/storage $APP_DIR/bootstrap/cache"
+            echo "  systemctl restart 'actions.runner.*'   # wajib: grup baru hanya terbaca setelah restart"
             exit 1
           fi
 
