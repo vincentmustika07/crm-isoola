@@ -173,7 +173,7 @@ export default function CustomersIndex({ customers }: Props) {
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">
-                            Customers test
+                            Customers
                         </h1>
                         <p className="mt-1 text-sm text-gray-500">
                             Manage customer data and villa purchases

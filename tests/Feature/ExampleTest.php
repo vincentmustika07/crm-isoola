@@ -9,10 +9,22 @@ class ExampleTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_returns_a_successful_response()
+    public function test_guest_is_redirected_to_login()
     {
-        $response = $this->get(route('home'));
+        // Route [home] tidak pernah ada di app ini; '/' cuma redirect ke /villas
+        // di balik middleware admin. Jadi tamu harus dilempar ke /login.
+        $this->get('/')->assertRedirect('/login');
+    }
 
-        $response->assertOk();
+    public function test_login_is_rate_limited()
+    {
+        // Melindungi throttle:5,1 di routes/web.php. Tanpa ini, satu password
+        // admin tunggal bisa dibrute force ribuan kali per menit.
+        for ($i = 0; $i < 5; $i++) {
+            $this->post('/login', ['username' => 'x', 'password' => 'y']);
+        }
+
+        $this->post('/login', ['username' => 'x', 'password' => 'y'])
+            ->assertStatus(429);
     }
 }

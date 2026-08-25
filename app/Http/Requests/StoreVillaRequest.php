@@ -16,6 +16,9 @@ class StoreVillaRequest extends FormRequest
         return [
             'name'     => 'required|string|max:255',
             'position' => 'required|string|max:50',
+            // status ada di $fillable Villa, jadi tanpa aturan ini nilai
+            // sembarang bisa lolos ke kolom enum dan bikin MySQL error 500.
+            'status'   => 'required|in:available,pending,sold',
         ];
     }
 }

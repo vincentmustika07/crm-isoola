@@ -84,7 +84,9 @@ export function useDeleteVilla() {
     }
 
     function confirmDelete() {
-        if (state.id === null) return;
+        if (state.id === null) {
+return;
+}
         
         const id = state.id;
         setState((s) => ({ ...s, loading: true }));

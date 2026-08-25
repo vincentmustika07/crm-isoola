@@ -1,11 +1,11 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft } from 'lucide-react';
-import { Controller } from 'react-hook-form';
 import { useState } from 'react';
+import { Controller } from 'react-hook-form';
 
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import {
     VILLA_NAME_OPTIONS,
@@ -128,7 +128,10 @@ export default function VillasEdit({ villa }: Props) {
                 confirmLabel="Save"
                 variant="primary"
                 onConfirm={() => {
-                    if (!pendingValues) return;
+                    if (!pendingValues) {
+return;
+}
+
                     onSubmit(pendingValues);
                     setConfirmOpen(false);
                     setPendingValues(null);

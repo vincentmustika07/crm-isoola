@@ -8,7 +8,10 @@ use App\Http\Controllers\CustomerController;
 // Auth routes (guest only)
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AuthController::class, 'login']);
+    // Aplikasi ini cuma punya satu password admin, jadi tanpa throttle
+    // penyerang bisa mencoba ribuan password per menit tanpa hambatan.
+    Route::post('/login', [AuthController::class, 'login'])
+        ->middleware('throttle:5,1');
 });
 
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
