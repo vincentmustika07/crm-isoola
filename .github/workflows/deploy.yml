@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
 
-# Cegah dua deploy berjalan bersamaan (rsync --delete bisa saling merusak)
+# rsync --delete tidak boleh jalan bersamaan
 concurrency:
   group: deploy-production
   cancel-in-progress: false
@@ -20,99 +20,53 @@ jobs:
     env:
       PHP: /usr/local/lsws/lsphp84/bin/php8.4
       APP_DIR: /home/crm.isoola.com/crm-isoola
-      COMPOSER_ALLOW_SUPERUSER: "1"
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install JS dependencies
-        run: npm ci
+      # Build di workspace, bukan di folder live, supaya tidak ada downtime
+      - name: Install dependencies
+        run: |
+          npm ci
+          $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
 
-      - name: Install PHP dependencies
-        run: $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
-
-      # wayfinder butuh vendor/ + artisan, jadi harus setelah composer install
+      # wayfinder butuh vendor/ + artisan, jadi setelah composer
       - name: Build assets
         run: npm run build
 
-      - name: Sync code to app directory
+      - name: Deploy to app directory
         run: |
-          set -euo pipefail
           git config --global --add safe.directory "$APP_DIR"
 
-          if [ ! -f "$APP_DIR/.env" ]; then
-            echo "ERROR: $APP_DIR/.env tidak ditemukan. Buat dulu di server."
-            exit 1
-          fi
+          test -f "$APP_DIR/.env" || { echo "ERROR: $APP_DIR/.env tidak ada"; exit 1; }
 
+          git -C "$APP_DIR" fetch --prune origin main
+          git -C "$APP_DIR" reset --hard origin/main
+
+          rsync -rltD -O --delete --chmod=D2775,F664 "$GITHUB_WORKSPACE/vendor/"       "$APP_DIR/vendor/"
+          rsync -rltD -O --delete --chmod=D2775,F664 "$GITHUB_WORKSPACE/public/build/" "$APP_DIR/public/build/"
+
+      - name: Migrate and cache
+        run: |
           cd "$APP_DIR"
-          git fetch --prune origin main
-          git reset --hard origin/main
-
-      - name: Sync built assets
-        run: |
-          set -euo pipefail
-          umask 0002
-
-          if [ ! -f "$GITHUB_WORKSPACE/public/build/manifest.json" ]; then
-            echo "ERROR: manifest.json tidak ada di $GITHUB_WORKSPACE/public/build/"
-            ls -la "$GITHUB_WORKSPACE/public/" || true
-            exit 1
-          fi
-
-          echo "Manifest ditemukan. Jumlah asset: $(ls "$GITHUB_WORKSPACE/public/build/assets" 2>/dev/null | wc -l)"
-          rsync -rltD -O --delete --no-owner --no-group --chmod=D2775,F664 "$GITHUB_WORKSPACE/public/build/" "$APP_DIR/public/build/"
-          echo "Assets tersinkron ke $APP_DIR/public/build"
-
-      - name: Sync vendor directory
-        run: |
-          set -euo pipefail
-          umask 0002
-          rsync -rltD -O --delete --no-owner --no-group --chmod=D2775,F664 "$GITHUB_WORKSPACE/vendor/" "$APP_DIR/vendor/"
-
-      - name: Ensure writable directories exist
-        run: |
-          set -euo pipefail
-          umask 0002
-          mkdir -p "$APP_DIR/storage/logs"
-          mkdir -p "$APP_DIR/storage/framework/cache/data"
-          mkdir -p "$APP_DIR/storage/framework/sessions"
-          mkdir -p "$APP_DIR/storage/framework/views"
-          mkdir -p "$APP_DIR/bootstrap/cache"
-
-      - name: Run Laravel post-deploy commands
-        run: |
-          set -euo pipefail
-          umask 0002
-          cd "$APP_DIR"
-          $PHP artisan storage:link --force
           $PHP artisan migrate --force
-          $PHP artisan optimize:clear
+          $PHP artisan storage:link
           $PHP artisan optimize
 
       - name: Restart OpenLiteSpeed
         run: sudo /usr/bin/systemctl restart lsws
 
-      - name: Verify deployment
+      - name: Smoke test
         run: |
-          set -euo pipefail
-          echo "=== Deploy Summary ==="
-          echo "App dir : $APP_DIR"
-          echo "PHP     : $($PHP -r 'echo PHP_VERSION;')"
-          echo "Branch  : $(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD)"
-          echo "Commit  : $(git -C "$APP_DIR" rev-parse --short HEAD)"
-          echo "Build   : $(ls "$APP_DIR/public/build/assets" | wc -l) asset files"
-          echo "======================"
-
-          code=$(curl -s -o /dev/null -w '%{http_code}' https://crm.isoola.com)
-          echo "HTTP status: $code"
+          code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 https://crm.isoola.com/login)
+          echo "Commit : $(git -C "$APP_DIR" rev-parse --short HEAD)"
+          echo "Assets : $(ls "$APP_DIR/public/build/assets" | wc -l) files"
+          echo "HTTP   : $code"
           case "$code" in
-            200|301|302) echo "Deploy sukses." ;;
-            *) echo "ERROR: situs mengembalikan $code"; exit 1 ;;
+            200|302) echo "Deploy OK" ;;
+            *) echo "Situs mengembalikan $code"; exit 1 ;;
           esac
