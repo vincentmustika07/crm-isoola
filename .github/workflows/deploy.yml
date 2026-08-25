@@ -57,16 +57,49 @@ jobs:
           $PHP artisan storage:link
           $PHP artisan optimize
 
+          # artisan jalan sebagai github-runner dan bikin file mode 644.
+          # User web cuma anggota grup lscpd, jadi tanpa g+w dia gagal nulis
+          # log/session/cache -> 500 tanpa jejak di laravel.log.
+          chmod -R g+w storage bootstrap/cache 2>/dev/null || true
+
       - name: Restart OpenLiteSpeed
         run: sudo /usr/bin/systemctl restart lsws
 
       - name: Smoke test
         run: |
           code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 https://crm.isoola.com/login)
+          log="$APP_DIR/storage/logs/laravel.log"
+
           echo "Commit : $(git -C "$APP_DIR" rev-parse --short HEAD)"
           echo "Assets : $(ls "$APP_DIR/public/build/assets" | wc -l) files"
           echo "HTTP   : $code"
           case "$code" in
-            200|302) echo "Deploy OK" ;;
-            *) echo "Situs mengembalikan $code"; exit 1 ;;
+            200|302) echo "Deploy OK"; exit 0 ;;
           esac
+
+          # Deploy sendiri sukses; 5xx berarti error runtime. Cetak buktinya.
+          echo "::error::Situs mengembalikan $code"
+
+          # Log basi pernah bikin salah diagnosa, jadi cek umurnya dulu.
+          echo "--- laravel.log ---"
+          if [ ! -f "$log" ]; then
+            echo "(file tidak ada)"
+          elif [ -n "$(find "$log" -newermt '-5 minutes' 2>/dev/null)" ]; then
+            echo "(baru ditulis, ini error yang relevan)"
+            awk '/\.(ERROR|CRITICAL|EMERGENCY)/{n=NR} {l[NR]=$0} END{for(i=n;i<=NR&&i<n+25;i++) print substr(l[i],1,400)}' "$log"
+          else
+            echo "PERINGATAN: tidak ada entri baru (terakhir ditulis $(date -r "$log" '+%Y-%m-%d %H:%M')),"
+            echo "jadi Laravel gagal sebelum logger siap ATAU tidak bisa menulis log. Abaikan isinya."
+          fi
+
+          # Fatal error sebelum logger siap hanya muncul di sini.
+          echo "--- OLS stderr.log ---"
+          tail -n 25 /usr/local/lsws/logs/stderr.log 2>/dev/null || echo "(tidak ada / tidak terbaca)"
+
+          echo "--- pemilik log & cache (user web harus bisa tulis) ---"
+          ls -ld "$APP_DIR/storage/logs" "$APP_DIR/bootstrap/cache" 2>&1
+          ls -l "$log" 2>&1 || true
+
+          echo "--- respons mentah ---"
+          curl -sk --max-time 20 https://crm.isoola.com/login | head -c 2000
+          exit 1
