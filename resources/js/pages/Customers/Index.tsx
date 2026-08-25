@@ -73,7 +73,7 @@ export default function CustomersIndex({ customers }: Props) {
                     </Link>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
-                    <StatCard label="Total" value={customers.meta.total} icon={Users} iconBg="bg-blue-50" iconColor="text-blue-600" />
+                    <StatCard label="Total" value={customers.total} icon={Users} iconBg="bg-blue-50" iconColor="text-blue-600" />
                     <StatCard label="With Villa" value={withVilla} icon={Users} iconBg="bg-emerald-50" iconColor="text-emerald-600" />
                     <StatCard label="Without Villa" value={withoutVilla} icon={Users} iconBg="bg-gray-100" iconColor="text-gray-500" />
                 </div>
@@ -95,7 +95,7 @@ export default function CustomersIndex({ customers }: Props) {
                         </div>
                             {showCount && (
                                 <span className="text-xs text-gray-500">
-                                    {filtered.length} of {customers.meta.total} customers
+                                    {filtered.length} of {customers.total} customers
                                 </span>
                             )}
                         </div>

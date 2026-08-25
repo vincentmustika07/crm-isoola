@@ -138,7 +138,7 @@ export default function VillasIndex({ villas }: Props) {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <StatCard label="Total" value={villas.meta.total} icon={Building2} iconBg="bg-blue-50" iconColor="text-blue-600" />
+                    <StatCard label="Total" value={villas.total} icon={Building2} iconBg="bg-blue-50" iconColor="text-blue-600" />
                     <StatCard label="Available" value={totalAvailable} icon={CheckCircle} iconBg="bg-emerald-50" iconColor="text-emerald-600" />
                     <StatCard label="Pending" value={totalPending} icon={Clock} iconBg="bg-amber-50" iconColor="text-amber-600" />
                     <StatCard label="Sold" value={totalSold} icon={Building2} iconBg="bg-red-50" iconColor="text-red-500" />
@@ -170,7 +170,7 @@ export default function VillasIndex({ villas }: Props) {
 
                             {showCount && (
                                 <span className="text-xs text-gray-500">
-                                    {filtered.length} of {villas.meta.total} villas
+                                    {filtered.length} of {villas.total} villas
                                 </span>
                             )}
                         </div>
