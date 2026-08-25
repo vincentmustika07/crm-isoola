@@ -67,14 +67,14 @@ jobs:
           fi
 
           echo "Manifest ditemukan. Jumlah asset: $(ls "$GITHUB_WORKSPACE/public/build/assets" 2>/dev/null | wc -l)"
-          rsync -a --delete "$GITHUB_WORKSPACE/public/build/" "$APP_DIR/public/build/"
+          rsync -rltD --delete --no-perms --no-owner --no-group --chmod=D2775,F664 "$GITHUB_WORKSPACE/public/build/" "$APP_DIR/public/build/"
           echo "Assets tersinkron ke $APP_DIR/public/build"
 
       - name: Sync vendor directory
         run: |
           set -euo pipefail
           umask 0002
-          rsync -a --delete "$GITHUB_WORKSPACE/vendor/" "$APP_DIR/vendor/"
+          rsync -rltD --delete --no-perms --no-owner --no-group --chmod=D2775,F664 "$GITHUB_WORKSPACE/vendor/" "$APP_DIR/vendor/"
 
       - name: Ensure writable directories exist
         run: |
