@@ -41,12 +41,30 @@ jobs:
       - name: Build assets
         run: npm run build
 
-      - name: Deploy to app directory
+      # Gagal di sini jauh lebih murah daripada gagal di tengah git reset --hard,
+      # yang bisa meninggalkan folder live setengah jadi.
+      - name: Preflight
         run: |
           git config --global --add safe.directory "$APP_DIR"
 
-          test -f "$APP_DIR/.env" || { echo "ERROR: $APP_DIR/.env tidak ada"; exit 1; }
+          test -f "$APP_DIR/.env"  || { echo "::error::$APP_DIR/.env tidak ada"; exit 1; }
+          test -d "$APP_DIR/.git"  || { echo "::error::$APP_DIR bukan git repo"; exit 1; }
 
+          # git fetch menulis .git/FETCH_HEAD, dan reset --hard menimpa file
+          # worktree. Dua-duanya butuh runner sebagai PEMILIK, bukan cuma anggota
+          # grup: file .git default 444 dan .git/ sendiri 755, jadi bit group-write
+          # sering tidak ada. Begitu tree di-chgrp ke $WEB_GROUP tanpa chown,
+          # runner jatuh ke permission "other" (r-x) -> Permission denied.
+          if [ ! -w "$APP_DIR/.git" ] || [ ! -w "$APP_DIR" ]; then
+            echo "::error::$(id -un) tidak bisa menulis $APP_DIR (.git dimiliki $(stat -c '%U:%G %A' "$APP_DIR/.git"))"
+            echo "Perbaiki di server sebagai root, cukup sekali:"
+            echo "  chown -R $(id -un):$WEB_GROUP $APP_DIR"
+            echo "  find $APP_DIR -type d -exec chmod 2775 {} +"
+            exit 1
+          fi
+
+      - name: Deploy to app directory
+        run: |
           git -C "$APP_DIR" fetch --prune origin main
           git -C "$APP_DIR" reset --hard origin/main
 
