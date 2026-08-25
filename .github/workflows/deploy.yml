@@ -4,9 +4,18 @@ on:
   push:
     branches: [main]
 
+# Cegah dua deploy berjalan bersamaan (rsync --delete bisa saling merusak)
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: self-hosted
+
+    defaults:
+      run:
+        shell: bash
 
     env:
       PHP: /usr/local/lsws/lsphp84/bin/php8.4
@@ -28,71 +37,82 @@ jobs:
       - name: Install PHP dependencies
         run: $PHP /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
 
+      # wayfinder butuh vendor/ + artisan, jadi harus setelah composer install
       - name: Build assets
         run: npm run build
 
       - name: Sync code to app directory
         run: |
-          set -e
-          git config --global --add safe.directory $APP_DIR
+          set -euo pipefail
+          git config --global --add safe.directory "$APP_DIR"
+
           if [ ! -f "$APP_DIR/.env" ]; then
-            echo "ERROR: $APP_DIR/.env not found. Create it on the server before deploying."
+            echo "ERROR: $APP_DIR/.env tidak ditemukan. Buat dulu di server."
             exit 1
           fi
-          cd $APP_DIR
-          git pull origin main
+
+          cd "$APP_DIR"
+          git fetch --prune origin main
+          git reset --hard origin/main
 
       - name: Sync built assets
         run: |
-          set -e
+          set -euo pipefail
+          umask 0002
+
           if [ ! -f "$GITHUB_WORKSPACE/public/build/manifest.json" ]; then
-            echo "ERROR: manifest.json not found in $GITHUB_WORKSPACE/public/build/"
-            ls -la $GITHUB_WORKSPACE/public/ || true
+            echo "ERROR: manifest.json tidak ada di $GITHUB_WORKSPACE/public/build/"
+            ls -la "$GITHUB_WORKSPACE/public/" || true
             exit 1
           fi
-          echo "Build manifest found. Asset count: $(ls $GITHUB_WORKSPACE/public/build/assets 2>/dev/null | wc -l)"
-          sudo rsync -a --delete $GITHUB_WORKSPACE/public/build/ $APP_DIR/public/build/
-          sudo chown -R lscpd:lscpd $APP_DIR/public/build
-          echo "Assets synced successfully to $APP_DIR/public/build"
+
+          echo "Manifest ditemukan. Jumlah asset: $(ls "$GITHUB_WORKSPACE/public/build/assets" 2>/dev/null | wc -l)"
+          rsync -a --delete "$GITHUB_WORKSPACE/public/build/" "$APP_DIR/public/build/"
+          echo "Assets tersinkron ke $APP_DIR/public/build"
 
       - name: Sync vendor directory
         run: |
-          set -e
-          sudo rsync -a --delete $GITHUB_WORKSPACE/vendor/ $APP_DIR/vendor/
-          sudo chown -R lscpd:lscpd $APP_DIR/vendor
+          set -euo pipefail
+          umask 0002
+          rsync -a --delete "$GITHUB_WORKSPACE/vendor/" "$APP_DIR/vendor/"
 
-      - name: Fix permissions
+      - name: Ensure writable directories exist
         run: |
-          set -e
-          mkdir -p $APP_DIR/storage/logs
-          mkdir -p $APP_DIR/storage/framework/cache
-          mkdir -p $APP_DIR/storage/framework/sessions
-          mkdir -p $APP_DIR/storage/framework/views
-          mkdir -p $APP_DIR/bootstrap/cache
-          sudo chown -R lscpd:lscpd $APP_DIR/storage
-          sudo chown -R lscpd:lscpd $APP_DIR/bootstrap/cache
-          sudo chown lscpd:lscpd $APP_DIR/.env
-          sudo chmod 640 $APP_DIR/.env
+          set -euo pipefail
+          umask 0002
+          mkdir -p "$APP_DIR/storage/logs"
+          mkdir -p "$APP_DIR/storage/framework/cache/data"
+          mkdir -p "$APP_DIR/storage/framework/sessions"
+          mkdir -p "$APP_DIR/storage/framework/views"
+          mkdir -p "$APP_DIR/bootstrap/cache"
 
       - name: Run Laravel post-deploy commands
         run: |
-          set -e
-          $PHP $APP_DIR/artisan storage:link --force
-          $PHP $APP_DIR/artisan migrate --force
-          $PHP $APP_DIR/artisan config:clear
-          $PHP $APP_DIR/artisan cache:clear
-          $PHP $APP_DIR/artisan optimize
+          set -euo pipefail
+          umask 0002
+          cd "$APP_DIR"
+          $PHP artisan storage:link --force
+          $PHP artisan migrate --force
+          $PHP artisan optimize:clear
+          $PHP artisan optimize
 
       - name: Restart OpenLiteSpeed
-        run: sudo systemctl restart lsws
+        run: sudo /usr/bin/systemctl restart lsws
 
       - name: Verify deployment
         run: |
+          set -euo pipefail
           echo "=== Deploy Summary ==="
           echo "App dir : $APP_DIR"
           echo "PHP     : $($PHP -r 'echo PHP_VERSION;')"
-          echo "Branch  : $(cd $APP_DIR && git rev-parse --abbrev-ref HEAD)"
-          echo "Commit  : $(cd $APP_DIR && git rev-parse --short HEAD)"
-          echo "Build   : $(ls $APP_DIR/public/build/assets | wc -l) asset files"
-          echo "====================="
-          echo "Deploy completed successfully!"
+          echo "Branch  : $(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD)"
+          echo "Commit  : $(git -C "$APP_DIR" rev-parse --short HEAD)"
+          echo "Build   : $(ls "$APP_DIR/public/build/assets" | wc -l) asset files"
+          echo "======================"
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://crm.isoola.com)
+          echo "HTTP status: $code"
+          case "$code" in
+            200|301|302) echo "Deploy sukses." ;;
+            *) echo "ERROR: situs mengembalikan $code"; exit 1 ;;
+          esac
