@@ -67,7 +67,14 @@ jobs:
           dump=$(command -v mysqldump || command -v mariadb-dump) \
             || { echo "::error::mysqldump/mariadb-dump tidak ada di PATH"; exit 1; }
 
-          mkdir -p "$BACKUP_DIR"
+          # Induk /home/crm.isoola.com dimiliki crmis5326 mode drwx--x--x, jadi
+          # runner boleh menembus tapi tidak boleh membuat folder di situ.
+          # Foldernya harus dibuat root sekali, lalu diserahkan ke runner.
+          if ! mkdir -p "$BACKUP_DIR" 2>/dev/null && [ ! -w "$BACKUP_DIR" ]; then
+            echo "::error::$BACKUP_DIR belum ada / tidak bisa ditulis. Jalankan di server sebagai root, cukup sekali:"
+            echo "  install -d -o github-runner -g github-runner -m 700 $BACKUP_DIR"
+            exit 1
+          fi
 
           # Password lewat file, bukan argv, supaya tidak terbaca lewat `ps`.
           cnf=$(mktemp); chmod 600 "$cnf"
@@ -83,10 +90,13 @@ jobs:
           # Backup yang gagal dalam senyap lebih bahaya daripada tidak ada backup,
           # karena bikin merasa aman padahal tidak. Jadi batalkan sebelum migrate.
           [ -s "$out" ] || { echo "::error::dump kosong/gagal, migrate dibatalkan"; exit 1; }
-          chmod 640 "$out"
+          # 600, bukan 640: PHP web jalan sebagai grup crmis5326. Kalau dump bisa
+          # dibaca grup itu, satu celah di aplikasi = seluruh isi DB terbaca.
+          chmod 600 "$out"
 
-          # Simpan 7 terbaru saja biar disk tidak penuh.
-          ls -1t "$BACKUP_DIR"/db-*.sql.gz | tail -n +8 | xargs -r rm --
+          # Simpan 20 terbaru. Sengaja tidak 7: dump cuma terjadi saat deploy,
+          # jadi kalau sehari push 7x, riwayat hari sebelumnya habis tersapu.
+          ls -1t "$BACKUP_DIR"/db-*.sql.gz | tail -n +21 | xargs -r rm --
           echo "Backup: $out ($(du -h "$out" | cut -f1))"
 
       - name: Deploy to app directory
