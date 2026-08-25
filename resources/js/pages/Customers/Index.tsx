@@ -9,29 +9,57 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DataTable } from '@/components/ui/DataTable';
 import { Select } from '@/components/ui/Select';
 import { StatCard } from '@/components/ui/StatCard';
-import { useCustomerTable, useDeleteCustomer } from '@/features/customers/hooks';
+import {
+    useCustomerTable,
+    useDeleteCustomer,
+} from '@/features/customers/hooks';
 import type { Customer } from '@/features/customers/types';
 import { VILLA_STATUS_VARIANT } from '@/features/villas/constants';
 import AppLayout from '@/layouts/AppLayout';
 import type { Paginator } from '@/lib/types';
 import { formatPhone } from '@/lib/utils';
 
-interface Props { customers: Paginator<Customer>; }
+interface Props {
+    customers: Paginator<Customer>;
+}
 
-function CustomerActions({ customer, onDelete }: { customer: Customer; onDelete: (id: number) => void; }) {
+function CustomerActions({
+    customer,
+    onDelete,
+}: {
+    customer: Customer;
+    onDelete: (id: number) => void;
+}) {
     return (
         <div className="flex items-center justify-end gap-2">
-            <Link href={`/customers/${customer.id}`}><Button variant="secondary" size="sm">Detail</Button></Link>
-            <Link href={`/customers/${customer.id}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>
-            <Button variant="danger" size="sm" onClick={() => onDelete(customer.id)}>Delete</Button>
+            <Link href={`/customers/${customer.id}`}>
+                <Button variant="secondary" size="sm">
+                    Detail
+                </Button>
+            </Link>
+            <Link href={`/customers/${customer.id}/edit`}>
+                <Button variant="secondary" size="sm">
+                    Edit
+                </Button>
+            </Link>
+            <Button
+                variant="danger"
+                size="sm"
+                onClick={() => onDelete(customer.id)}
+            >
+                Delete
+            </Button>
         </div>
     );
 }
 
 export default function CustomersIndex({ customers }: Props) {
-    const { state, openConfirm, closeConfirm, confirmDelete } = useDeleteCustomer();
+    const { state, openConfirm, closeConfirm, confirmDelete } =
+        useDeleteCustomer();
     const [search, setSearch] = useState('');
-    const [villaFilter, setVillaFilter] = useState<'all' | 'with' | 'without'>('all');
+    const [villaFilter, setVillaFilter] = useState<'all' | 'with' | 'without'>(
+        'all',
+    );
     const filtered = customers.data.filter((c) => {
         const q = search.trim().toLowerCase();
         const matchesSearch =
@@ -48,54 +76,165 @@ export default function CustomersIndex({ customers }: Props) {
 
         return matchesSearch && matchesVillaFilter;
     });
-    const columns = useMemo<ColumnDef<Customer>[]>(() => [
-        { accessorKey: 'name', header: 'Name', cell: ({ row }) => (<Link href={`/customers/${row.original.id}`} className="font-medium text-gray-900 transition-colors hover:text-blue-600">{row.original.name}</Link>) },
-        { accessorKey: 'phone_number', header: 'Phone Number', cell: ({ row }) => (<span className="text-sm text-gray-600">{formatPhone(row.original.phone_code, row.original.phone_number)}</span>) },
-        { accessorKey: 'email', header: 'Email', cell: ({ row }) => row.original.email ? (<span className="text-sm text-gray-600">{row.original.email}</span>) : (<span className="text-sm italic text-gray-400">—</span>) },
-        { accessorKey: 'villas', header: 'Villas', cell: ({ row }) => { const v = row.original.villas; if (!v || v.length === 0) return <span className="text-sm italic text-gray-400">—</span>; return <div className="flex flex-wrap gap-1">{v.map((villa) => <Badge key={villa.id} variant={VILLA_STATUS_VARIANT[villa.status]}>{villa.position}</Badge>)}</div>; } },
-        { id: 'actions', header: '', enableSorting: false, size: 120, cell: ({ row }) => (<CustomerActions customer={row.original} onDelete={openConfirm} />) },
-    ], [openConfirm]);
+    const columns = useMemo<ColumnDef<Customer>[]>(
+        () => [
+            {
+                accessorKey: 'name',
+                header: 'Name',
+                cell: ({ row }) => (
+                    <Link
+                        href={`/customers/${row.original.id}`}
+                        className="font-medium text-gray-900 transition-colors hover:text-blue-600"
+                    >
+                        {row.original.name}
+                    </Link>
+                ),
+            },
+            {
+                accessorKey: 'phone_number',
+                header: 'Phone Number',
+                cell: ({ row }) => (
+                    <span className="text-sm text-gray-600">
+                        {formatPhone(
+                            row.original.phone_code,
+                            row.original.phone_number,
+                        )}
+                    </span>
+                ),
+            },
+            {
+                accessorKey: 'email',
+                header: 'Email',
+                cell: ({ row }) =>
+                    row.original.email ? (
+                        <span className="text-sm text-gray-600">
+                            {row.original.email}
+                        </span>
+                    ) : (
+                        <span className="text-sm text-gray-400 italic">—</span>
+                    ),
+            },
+            {
+                accessorKey: 'villas',
+                header: 'Villas',
+                cell: ({ row }) => {
+                    const v = row.original.villas;
+
+                    if (!v || v.length === 0) {
+                        return (
+                            <span className="text-sm text-gray-400 italic">
+                                —
+                            </span>
+                        );
+                    }
+
+                    return (
+                        <div className="flex flex-wrap gap-1">
+                            {v.map((villa) => (
+                                <Badge
+                                    key={villa.id}
+                                    variant={VILLA_STATUS_VARIANT[villa.status]}
+                                >
+                                    {villa.position}
+                                </Badge>
+                            ))}
+                        </div>
+                    );
+                },
+            },
+            {
+                id: 'actions',
+                header: '',
+                enableSorting: false,
+                size: 120,
+                cell: ({ row }) => (
+                    <CustomerActions
+                        customer={row.original}
+                        onDelete={openConfirm}
+                    />
+                ),
+            },
+        ],
+        [openConfirm],
+    );
     const table = useCustomerTable(filtered, columns);
-    const withVilla = customers.data.filter((c) => c.villas && c.villas.length > 0).length;
-    const withoutVilla = customers.data.filter((c) => !c.villas || c.villas.length === 0).length;
+    const withVilla = customers.data.filter(
+        (c) => c.villas && c.villas.length > 0,
+    ).length;
+    const withoutVilla = customers.data.filter(
+        (c) => !c.villas || c.villas.length === 0,
+    ).length;
     const showCount = search.trim() !== '' || villaFilter !== 'all';
+
     return (
         <AppLayout>
             <Head title="Customers" />
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
-                        <p className="mt-1 text-sm text-gray-500">Manage customer data and villa purchases</p>
+                        <h1 className="text-2xl font-bold text-gray-900">
+                            Customers test
+                        </h1>
+                        <p className="mt-1 text-sm text-gray-500">
+                            Manage customer data and villa purchases
+                        </p>
                     </div>
                     <Link href="/customers/create">
-                        <Button><Plus className="h-4 w-4" />Add Customer</Button>
+                        <Button>
+                            <Plus className="h-4 w-4" />
+                            Add Customer
+                        </Button>
                     </Link>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
-                    <StatCard label="Total" value={customers.total} icon={Users} iconBg="bg-blue-50" iconColor="text-blue-600" />
-                    <StatCard label="With Villa" value={withVilla} icon={Users} iconBg="bg-emerald-50" iconColor="text-emerald-600" />
-                    <StatCard label="Without Villa" value={withoutVilla} icon={Users} iconBg="bg-gray-100" iconColor="text-gray-500" />
+                    <StatCard
+                        label="Total"
+                        value={customers.total}
+                        icon={Users}
+                        iconBg="bg-blue-50"
+                        iconColor="text-blue-600"
+                    />
+                    <StatCard
+                        label="With Villa"
+                        value={withVilla}
+                        icon={Users}
+                        iconBg="bg-emerald-50"
+                        iconColor="text-emerald-600"
+                    />
+                    <StatCard
+                        label="Without Villa"
+                        value={withoutVilla}
+                        icon={Users}
+                        iconBg="bg-gray-100"
+                        iconColor="text-gray-500"
+                    />
                 </div>
                 <div className="rounded-lg border border-gray-200 bg-white">
                     <div className="flex flex-col gap-3 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="space-y-1">
                             <div className="relative w-full sm:w-[220px]">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                            <input type="text" placeholder="Search by name, email, or phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="block w-full rounded-md border-0 py-2 pl-9 pr-8 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-inset focus:ring-blue-600" />
-                            {search.trim() !== '' && (
-                                <button
-                                    onClick={() => setSearch('')}
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                    aria-label="Clear search"
-                                >
-                                    <X className="h-3.5 w-3.5" />
-                                </button>
-                            )}
-                        </div>
+                                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search by name, email, or phone..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="block w-full rounded-md border-0 py-2 pr-8 pl-9 text-sm text-gray-900 shadow-sm ring-1 ring-gray-300 outline-none ring-inset placeholder:text-gray-400 focus:ring-2 focus:ring-blue-600 focus:ring-inset"
+                                />
+                                {search.trim() !== '' && (
+                                    <button
+                                        onClick={() => setSearch('')}
+                                        className="absolute top-1/2 right-2.5 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                        aria-label="Clear search"
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </div>
                             {showCount && (
                                 <span className="text-xs text-gray-500">
-                                    {filtered.length} of {customers.total} customers
+                                    {filtered.length} of {customers.total}{' '}
+                                    customers
                                 </span>
                             )}
                         </div>
@@ -105,18 +244,25 @@ export default function CustomersIndex({ customers }: Props) {
                                 options={[
                                     { value: 'all', label: 'All' },
                                     { value: 'with', label: 'With Villa' },
-                                    { value: 'without', label: 'Without Villa' },
+                                    {
+                                        value: 'without',
+                                        label: 'Without Villa',
+                                    },
                                 ]}
                                 value={villaFilter}
                                 onChange={(e) =>
                                     setVillaFilter(
-                                        e.target.value as 'all' | 'with' | 'without',
+                                        e.target.value as
+                                            'all' | 'with' | 'without',
                                     )
                                 }
                             />
                         </div>
                     </div>
-                    <DataTable table={table} emptyMessage="No customers match your search and filter." />
+                    <DataTable
+                        table={table}
+                        emptyMessage="No customers match your search and filter."
+                    />
                 </div>
             </div>
             <ConfirmModal
