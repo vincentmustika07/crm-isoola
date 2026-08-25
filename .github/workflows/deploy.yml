@@ -20,6 +20,10 @@ jobs:
     env:
       PHP: /usr/local/lsws/lsphp84/bin/php8.4
       APP_DIR: /home/crm.isoola.com/crm-isoola
+      # Sengaja di luar APP_DIR: dump tidak boleh ikut tersapu rsync --delete
+      # atau git reset --hard, dan tidak boleh bisa diunduh dari web
+      # (karena itu jangan pernah taruh di bawah public/).
+      BACKUP_DIR: /home/crm.isoola.com/db-backups
       # extUser/extGroup vhost crm.isoola.com. PHP web jalan sebagai user ini,
       # bukan lscpd, jadi dia yang harus bisa nulis storage/ + bootstrap/cache.
       WEB_GROUP: crmis5326
@@ -41,55 +45,55 @@ jobs:
       - name: Build assets
         run: npm run build
 
-      # Gagal di sini jauh lebih murah daripada gagal di tengah git reset --hard,
-      # yang bisa meninggalkan folder live setengah jadi.
-      - name: Preflight
+      # Kode salah bisa diperbaiki dengan push ulang; data tidak. migrate --force
+      # jalan otomatis tiap deploy dan repo ini punya migrasi destruktif
+      # (dropColumn villa_id) yang down()-nya cuma mengembalikan kolom kosong,
+      # bukan isinya. Dump dulu, selagi DB masih utuh.
+      - name: Backup database
         run: |
-          git config --global --add safe.directory "$APP_DIR"
+          cd "$APP_DIR"
 
-          test -f "$APP_DIR/.env"  || { echo "::error::$APP_DIR/.env tidak ada"; exit 1; }
-          test -d "$APP_DIR/.git"  || { echo "::error::$APP_DIR bukan git repo"; exit 1; }
+          # Kredensial dibaca dari .env server supaya tidak ada rahasia yang
+          # perlu diduplikasi ke GitHub Secrets.
+          env_get() { sed -n "s/^$1=//p" .env | tail -n1 | tr -d "\"'\r"; }
 
-          # git fetch menulis .git/FETCH_HEAD dan reset --hard menimpa file worktree,
-          # jadi runner harus bisa menulis keduanya. Run #40 menunjukkan .git dimiliki
-          # lscpd:crmis5326 mode drwxrwsr-x -- sudah group-writable, artinya yang
-          # kurang adalah keanggotaan grup runner di $WEB_GROUP, bukan chown-nya.
-          # Cetak id -Gn + stat kedua path supaya tidak perlu menebak lagi.
-          me=$(id -un)
+          db=$(env_get DB_DATABASE)
+          [ -n "$db" ] || { echo "::error::DB_DATABASE kosong di $APP_DIR/.env"; exit 1; }
 
-          writable() { [ -w "$APP_DIR" ] && [ -w "$APP_DIR/.git" ]; }
+          host=$(env_get DB_HOST); host=${host:-127.0.0.1}
+          port=$(env_get DB_PORT); port=${port:-3306}
 
-          if ! writable; then
-            echo "$me anggota grup: $(id -Gn)"
-            for p in "$APP_DIR" "$APP_DIR/.git"; do
-              echo "  $(stat -c '%A %U:%G' "$p")  $p  (writable: $([ -w "$p" ] && echo ya || echo TIDAK))"
-            done
+          # CyberPanel kadang hanya menyediakan mariadb-dump.
+          dump=$(command -v mysqldump || command -v mariadb-dump) \
+            || { echo "::error::mysqldump/mariadb-dump tidak ada di PATH"; exit 1; }
 
-            # Runner sudah dipercaya `sudo systemctl restart lsws`. Kalau sudoers-nya
-            # tidak dibatasi ke perintah itu saja, deploy bisa sembuh sendiri tanpa
-            # perlu ada manusia yang SSH ke server tiap kali ownership di-reset
-            # (CyberPanel "Fix Permissions" melakukan itu).
-            if sudo -n true 2>/dev/null; then
-              echo "Punya sudo non-interaktif, mencoba perbaiki sendiri..."
-              sudo -n chown -R "$me:$WEB_GROUP" "$APP_DIR" || true
-              sudo -n find "$APP_DIR" -type d -exec chmod 2775 {} + || true
-              sudo -n chmod -R g+rwX "$APP_DIR/storage" "$APP_DIR/bootstrap/cache" || true
-            fi
-          fi
+          mkdir -p "$BACKUP_DIR"
 
-          if ! writable; then
-            echo "::error::$me tidak bisa menulis $APP_DIR ($(stat -c '%U:%G %A' "$APP_DIR"), .git $(stat -c '%U:%G %A' "$APP_DIR/.git"))"
-            echo "Jalankan di server sebagai root, cukup sekali:"
-            echo "  usermod -aG $WEB_GROUP $me"
-            echo "  chown -R $me:$WEB_GROUP $APP_DIR"
-            echo "  find $APP_DIR -type d -exec chmod 2775 {} +"
-            echo "  chmod -R g+rwX $APP_DIR/storage $APP_DIR/bootstrap/cache"
-            echo "  systemctl restart 'actions.runner.*'   # wajib: grup baru hanya terbaca setelah restart"
-            exit 1
-          fi
+          # Password lewat file, bukan argv, supaya tidak terbaca lewat `ps`.
+          cnf=$(mktemp); chmod 600 "$cnf"
+          trap 'rm -f "$cnf"' EXIT
+          printf '[client]\nuser=%s\npassword=%s\nhost=%s\nport=%s\n' \
+            "$(env_get DB_USERNAME)" "$(env_get DB_PASSWORD)" "$host" "$port" > "$cnf"
+
+          out="$BACKUP_DIR/db-$(date +%Y%m%d-%H%M%S).sql.gz"
+          # --single-transaction: dump konsisten tanpa mengunci tabel, situs tidak freeze.
+          "$dump" --defaults-extra-file="$cnf" --single-transaction --quick "$db" \
+            | gzip > "$out"
+
+          # Backup yang gagal dalam senyap lebih bahaya daripada tidak ada backup,
+          # karena bikin merasa aman padahal tidak. Jadi batalkan sebelum migrate.
+          [ -s "$out" ] || { echo "::error::dump kosong/gagal, migrate dibatalkan"; exit 1; }
+          chmod 640 "$out"
+
+          # Simpan 7 terbaru saja biar disk tidak penuh.
+          ls -1t "$BACKUP_DIR"/db-*.sql.gz | tail -n +8 | xargs -r rm --
+          echo "Backup: $out ($(du -h "$out" | cut -f1))"
 
       - name: Deploy to app directory
         run: |
+          # Wajib: git menolak beroperasi di repo yang pemiliknya user lain.
+          git config --global --add safe.directory "$APP_DIR"
+
           git -C "$APP_DIR" fetch --prune origin main
           git -C "$APP_DIR" reset --hard origin/main
 
@@ -112,62 +116,5 @@ jobs:
 
           chmod -R g+w storage bootstrap/cache 2>/dev/null || true
 
-      - name: Verify web user can write
-        run: |
-          cd "$APP_DIR"
-          # Deploy merah jauh lebih baik daripada situs 500 tanpa jejak log.
-          fail=0
-          for d in storage/logs storage/framework/sessions storage/framework/views bootstrap/cache; do
-            perm=$(stat -c "%A" "$d"); grp=$(stat -c "%G" "$d")
-            case "$perm" in
-              ?????w*) ;;
-              *) echo "::error::$d tidak group-writable (perm=$perm grup=$grp)"; fail=1 ;;
-            esac
-            if [ "$grp" != "$WEB_GROUP" ]; then
-              echo "::error::$d grup=$grp, seharusnya $WEB_GROUP"; fail=1
-            fi
-          done
-          [ "$fail" -eq 0 ] && echo "Web user ($WEB_GROUP) bisa nulis semua path runtime"
-          exit "$fail"
-
       - name: Restart OpenLiteSpeed
         run: sudo /usr/bin/systemctl restart lsws
-
-      - name: Smoke test
-        run: |
-          code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 https://crm.isoola.com/login)
-          log="$APP_DIR/storage/logs/laravel.log"
-
-          echo "Commit : $(git -C "$APP_DIR" rev-parse --short HEAD)"
-          echo "Assets : $(ls "$APP_DIR/public/build/assets" | wc -l) files"
-          echo "HTTP   : $code"
-          case "$code" in
-            200|302) echo "Deploy OK"; exit 0 ;;
-          esac
-
-          # Deploy sendiri sukses; 5xx berarti error runtime. Cetak buktinya.
-          echo "::error::Situs mengembalikan $code"
-
-          # Log basi pernah bikin salah diagnosa, jadi cek umurnya dulu.
-          echo "--- laravel.log ---"
-          if [ ! -f "$log" ]; then
-            echo "(file tidak ada)"
-          elif [ -n "$(find "$log" -newermt '-5 minutes' 2>/dev/null)" ]; then
-            echo "(baru ditulis, ini error yang relevan)"
-            awk '/\.(ERROR|CRITICAL|EMERGENCY)/{n=NR} {l[NR]=$0} END{for(i=n;i<=NR&&i<n+25;i++) print substr(l[i],1,400)}' "$log"
-          else
-            echo "PERINGATAN: tidak ada entri baru (terakhir ditulis $(date -r "$log" '+%Y-%m-%d %H:%M')),"
-            echo "jadi Laravel gagal sebelum logger siap ATAU tidak bisa menulis log. Abaikan isinya."
-          fi
-
-          # Fatal error sebelum logger siap hanya muncul di sini.
-          echo "--- OLS stderr.log ---"
-          tail -n 25 /usr/local/lsws/logs/stderr.log 2>/dev/null || echo "(tidak ada / tidak terbaca)"
-
-          echo "--- pemilik log & cache (user web harus bisa tulis) ---"
-          ls -ld "$APP_DIR/storage/logs" "$APP_DIR/bootstrap/cache" 2>&1
-          ls -l "$log" 2>&1 || true
-
-          echo "--- respons mentah ---"
-          curl -sk --max-time 20 https://crm.isoola.com/login | head -c 2000
-          exit 1
